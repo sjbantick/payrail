@@ -8,6 +8,18 @@ importers:
 
   .: {}
 
+  examples/hono:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.19.6
+        version: 1.19.11(hono@4.12.5)
+      '@payrail/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
+      hono:
+        specifier: ^4.9.7
+        version: 4.12.5
+
   packages/contracts:
     devDependencies:
       '@nomicfoundation/hardhat-ethers':
