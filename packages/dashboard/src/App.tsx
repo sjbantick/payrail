@@ -178,20 +178,49 @@ function DocsPage() {
     <MarketingLayout>
       <section className="mx-auto w-full max-w-5xl px-6 pb-20 pt-16">
         <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Docs</p>
-        <h1 className="mt-3 text-3xl font-semibold text-white">Quickstart: first paid API request</h1>
+        <h1 className="mt-3 text-3xl font-semibold text-white">5-minute quickstart: first paid API request</h1>
         <p className="mt-3 text-sm text-slate-300">
-          Integrate `@payrail/gateway`, verify payment on `@payrail/server`, and test with USDC on
-          Base Sepolia.
+          Copy this path end-to-end to run PayRail locally, verify one paid request, and confirm the
+          402 failure path when payment is invalid.
         </p>
 
         <div className="mt-8 space-y-8">
           <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 className="text-lg font-semibold text-white">1) Install gateway package</h2>
-            <CodeBlock value="pnpm add @payrail/gateway" />
+            <h2 className="text-lg font-semibold text-white">0) Prerequisites</h2>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
+              <li>Node.js 20+ and pnpm 9+</li>
+              <li>A running PostgreSQL instance</li>
+              <li>
+                `DATABASE_URL` and `USDC_CONTRACT_ADDRESS` set in your environment (copy from
+                `.env.example`)
+              </li>
+            </ul>
           </article>
 
           <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 className="text-lg font-semibold text-white">2) Wrap your protected endpoint</h2>
+            <h2 className="text-lg font-semibold text-white">1) Run the 5-minute path</h2>
+            <CodeBlock
+              value={`# from repo root
+pnpm install
+
+# start API in one terminal
+pnpm --filter @payrail/server start
+
+# in another terminal, run the paid-request demo
+pnpm demo:first-payment`}
+            />
+            <p className="mt-4 text-sm text-slate-300">Expected output includes these lines:</p>
+            <CodeBlock
+              value={`== PAY-19 Demo: First Paid Request ==
+Success status: 200
+Failure status: 402
+Failure code: PAYMENT_REQUIRED
+Usage evidence acceptedEvents: 1`}
+            />
+          </article>
+
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-lg font-semibold text-white">2) Add gateway middleware to your API</h2>
             <CodeBlock
               value={`import { Hono } from 'hono';
 import { payrailGateway } from '@payrail/gateway';
@@ -206,7 +235,7 @@ app.use('/v1/private/*', payrailGateway({
       body: JSON.stringify({
         endpointId: 'your-endpoint-id',
         requestId,
-        payment: { txHash, chainId: 84532, token: 'USDC' },
+        payment: { txHash, chainId: 8453, token: 'USDC' },
         request: { method, path }
       })
     });
@@ -222,19 +251,67 @@ app.use('/v1/private/*', payrailGateway({
           </article>
 
           <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-            <h2 className="text-lg font-semibold text-white">3) Test with USDC on Base Sepolia</h2>
-            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-300">
-              <li>Set server env (`DATABASE_URL`, `USDC_CONTRACT_ADDRESS`) and start `@payrail/server`.</li>
-              <li>Use a Base Sepolia USDC transfer transaction hash in your `x-payment-tx` header.</li>
-              <li>Call your protected route and confirm accepted requests appear in dashboard metrics.</li>
-            </ol>
+            <h2 className="text-lg font-semibold text-white">3) Copy-paste verify-and-meter flow</h2>
+            <p className="mt-3 text-sm text-slate-300">
+              This demonstrates the paid middleware contract directly with `@payrail/server`.
+            </p>
             <CodeBlock
-              value={`curl -X POST http://127.0.0.1:8787/v1/private/echo \\
-  -H 'x-payment-tx: 0xabc123...' \\
-  -H 'x-request-id: req_demo_001' \\
+              value={`# success path (valid tx hash fixture)
+curl -sS -X POST http://127.0.0.1:3000/v1/verify-and-meter \\
   -H 'content-type: application/json' \\
-  -d '{"hello":"world"}'`}
+  -d '{
+    "endpointId":"22222222-2222-4222-8222-222222222222",
+    "requestId":"req_demo_success_1",
+    "idempotencyKey":"idem_demo_success_1",
+    "payment":{"txHash":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","chainId":8453,"token":"USDC"},
+    "usage":{"units":1}
+  }'
+
+# failure path (invalid tx hash fixture)
+curl -sS -X POST http://127.0.0.1:3000/v1/verify-and-meter \\
+  -H 'content-type: application/json' \\
+  -d '{
+    "endpointId":"22222222-2222-4222-8222-222222222222",
+    "requestId":"req_demo_failure_1",
+    "idempotencyKey":"idem_demo_failure_1",
+    "payment":{"txHash":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","chainId":8453,"token":"USDC"},
+    "usage":{"units":1}
+  }'`}
             />
+            <p className="mt-4 text-sm text-slate-300">Expected response shape:</p>
+            <CodeBlock
+              value={`// 200 OK
+{
+  "allowed": true,
+  "meterEventId": "...",
+  "chargedUsdcMicro": 1000,
+  "paymentTxHash": "0xaaaaaaaa..."
+}
+
+// 402 Payment Required
+{
+  "allowed": false,
+  "code": "PAYMENT_REQUIRED",
+  "message": "Valid USDC payment not found for this request",
+  "requiredUsdcMicro": 1000,
+  "details": {
+    "chainId": 8453,
+    "receiver": "0x...",
+    "reason": "PAYMENT_REQUIRED"
+  }
+}`}
+            />
+          </article>
+
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+            <h2 className="text-lg font-semibold text-white">4) Self-check before shipping</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              <li>[] `pnpm demo:first-payment` exits successfully.</li>
+              <li>[] Demo logs show both `Success status: 200` and `Failure status: 402`.</li>
+              <li>[] Your protected route rejects missing/invalid payment with a 402 response.</li>
+              <li>[] A valid paid request records usage evidence (`meterEventId` present).</li>
+              <li>[] Dashboard metrics reflect accepted paid requests.</li>
+            </ul>
           </article>
         </div>
       </section>
