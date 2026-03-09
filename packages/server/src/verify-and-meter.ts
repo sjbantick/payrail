@@ -12,6 +12,8 @@ import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg
 import type { Address, Hex } from 'viem';
 import { z } from 'zod';
 
+import { runMigrations } from './db/migrate.js';
+
 const verifyAndMeterRequestSchema = z.object({
   endpointId: z.string().min(1),
   requestId: z.string().min(1),
@@ -98,48 +100,6 @@ export interface VerifyAndMeterFailureResponse {
     reason: string;
   };
 }
-
-const CREATE_VERIFY_SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS api_endpoints (
-    id TEXT PRIMARY KEY,
-    price_per_call_usdc_micro BIGINT NOT NULL,
-    receiver_wallet TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE IF NOT EXISTS payment_transactions (
-    id TEXT PRIMARY KEY,
-    tx_hash TEXT NOT NULL UNIQUE,
-    chain_id BIGINT NOT NULL,
-    token_contract TEXT NOT NULL,
-    from_wallet TEXT NOT NULL,
-    to_wallet TEXT NOT NULL,
-    amount_usdc_micro BIGINT NOT NULL,
-    block_number BIGINT NOT NULL,
-    confirmations INTEGER NOT NULL,
-    verified_at TIMESTAMPTZ NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('observed', 'verified', 'rejected')),
-    rejection_reason TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE TABLE IF NOT EXISTS meter_events (
-    id TEXT PRIMARY KEY,
-    endpoint_id TEXT NOT NULL,
-    payment_transaction_id TEXT REFERENCES payment_transactions(id),
-    request_id TEXT NOT NULL,
-    units BIGINT NOT NULL DEFAULT 1,
-    unit_price_usdc_micro BIGINT NOT NULL,
-    total_price_usdc_micro BIGINT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('accepted', 'rejected', 'error')),
-    reject_code TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(endpoint_id, request_id)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_payment_transactions_tx_hash ON payment_transactions(tx_hash);
-  CREATE INDEX IF NOT EXISTS idx_meter_events_endpoint_request ON meter_events(endpoint_id, request_id);
-`;
 
 const SELECT_ENDPOINT_SQL = `
   SELECT id, price_per_call_usdc_micro, receiver_wallet
@@ -324,7 +284,7 @@ export async function ensureVerifyAndMeterSchema(pool?: QueryablePool): Promise<
     return;
   }
 
-  const readyPromise = resolvedPool.query(CREATE_VERIFY_SCHEMA_SQL).then(() => undefined);
+  const readyPromise = runMigrations({ pool: resolvedPool }).then(() => undefined);
   verifySchemaReady.set(cacheKey, readyPromise);
 
   await readyPromise;

@@ -4,7 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
-  "types": "src/index.ts",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --project tsconfig.json --noEmit",
@@ -12,6 +18,7 @@
     "test": "pnpm run build && node --test dist/**/*.test.js"
   },
   "dependencies": {
+    "hono": "^4.9.7",
     "viem": "^2.39.0"
   },
   "devDependencies": {

@@ -7,10 +7,14 @@
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "build": "tsc --project tsconfig.build.json",
-    "test": "pnpm run build && node --test dist/**/*.test.js",
-    "start": "node dist/index.js"
+    "test": "pnpm run build && node --test dist/*.test.js dist/**/*.test.js",
+    "db:migrate": "pnpm run build && node dist/db/migrate.js",
+    "db:seed": "pnpm run build && node dist/db/seed.js",
+    "settlement:worker": "pnpm run build && node dist/settlement.js",
+    "start": "pnpm run build && node dist/index.js"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@payrail/gateway": "workspace:*",
     "hono": "^4.9.7",
     "pg": "^8.20.0",

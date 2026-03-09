@@ -4,10 +4,12 @@ import test from 'node:test';
 import type { PaymentVerificationResult } from '@payrail/gateway';
 import { newDb } from 'pg-mem';
 
+import { runMigrations } from './db/migrate.js';
+import { createApiEndpoint, createDeveloper } from './db/models.js';
 import { createApp } from './index.js';
-import { ensureVerifyAndMeterSchema } from './verify-and-meter.js';
 
-const endpointId = 'ep_123';
+const endpointId = '22222222-2222-4222-8222-222222222222';
+const developerId = '11111111-1111-4111-8111-111111111111';
 const requestId = 'req_123';
 const txHash = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const usdcContract = '0x036CbD53842c5426634e7929541eC2318f3dCf7e';
@@ -22,14 +24,20 @@ function createMemoryPool() {
 }
 
 async function seedEndpoint(pool: { query: (sql: string, params?: unknown[]) => Promise<unknown> }) {
-  await ensureVerifyAndMeterSchema(pool as never);
-  await pool.query(
-    `
-      INSERT INTO api_endpoints (id, price_per_call_usdc_micro, receiver_wallet)
-      VALUES ($1, $2, $3)
-    `,
-    [endpointId, '1000', receiverWallet],
-  );
+  await runMigrations({ pool: pool as never });
+  await createDeveloper(pool as never, {
+    id: developerId,
+    name: 'Verify And Meter Test Developer',
+    defaultPayoutWallet: receiverWallet,
+  });
+  await createApiEndpoint(pool as never, {
+    id: endpointId,
+    developerId,
+    slug: 'verify-and-meter-test-endpoint',
+    upstreamUrl: 'https://example.com/api/paid',
+    pricePerCallUsdcMicro: 1000n,
+    receiverWallet,
+  });
 }
 
 function buildPayload(overrides?: Partial<Record<string, unknown>>) {

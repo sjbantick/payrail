@@ -6,6 +6,7 @@
   "scripts": {
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "demo:first-payment": "bash scripts/demo-first-payment.sh"
   }
 }
