@@ -1,7 +1,10 @@
 {
   "name": "@payrail/gateway",
-  "private": true,
   "version": "0.1.0",
+  "description": "Hono middleware for stablecoin payment gating — the PayRail 402 payment rail for micro-APIs",
+  "repository": { "type": "git", "url": "https://github.com/sjbantick/payrail" },
+  "license": "MIT",
+  "keywords": ["hono", "middleware", "usdc", "stablecoin", "micropayments", "web3", "base", "payment", "402"],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
