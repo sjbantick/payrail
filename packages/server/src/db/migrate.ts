@@ -5,10 +5,6 @@ import { pathToFileURL } from 'node:url';
 
 import { closeDatabasePool, getDatabasePool } from './connection.js';
 
-interface MigrationRow {
-  name: string;
-}
-
 export interface RunMigrationsOptions {
   pool?: MigrationPool;
   migrationsDir?: string;
