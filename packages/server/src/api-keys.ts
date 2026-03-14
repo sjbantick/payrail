@@ -1,21 +1,11 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import type { Hono } from 'hono';
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { z } from 'zod';
 
-import { runMigrations } from './db/migrate.js';
+import type { PoolClient } from 'pg';
 
-interface Queryable {
-  query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<QueryResult<T>>;
-}
-
-interface QueryablePool extends Queryable {
-  connect(): Promise<PoolClient>;
-}
+import { getDatabasePool, type QueryablePool } from './db/connection.js';
 
 interface AuthApiKeyRow {
   id: string;
@@ -63,48 +53,8 @@ const apiKeyIdSchema = z.object({
   id: z.string().uuid(),
 });
 
-let defaultPool: Pool | null = null;
-const apiKeySchemaReady = new WeakMap<object, Promise<unknown>>();
-
-function getDefaultPool(): QueryablePool {
-  if (defaultPool) {
-    return defaultPool;
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required for API key management.');
-  }
-
-  defaultPool = new Pool({ connectionString });
-  return defaultPool;
-}
-
 function getPool(pool?: QueryablePool): QueryablePool {
-  if (pool) {
-    return pool;
-  }
-
-  return getDefaultPool();
-}
-
-async function ensureApiKeySchema(pool: QueryablePool): Promise<void> {
-  const identity = pool as unknown as object;
-  const existing = apiKeySchemaReady.get(identity);
-  if (existing) {
-    await existing;
-    return;
-  }
-
-  const pending = runMigrations({ pool: pool as never });
-  apiKeySchemaReady.set(identity, pending);
-
-  try {
-    await pending;
-  } catch (error) {
-    apiKeySchemaReady.delete(identity);
-    throw error;
-  }
+  return pool ?? getDatabasePool();
 }
 
 function hashApiKey(value: string): string {
@@ -222,7 +172,6 @@ async function resolveDeveloperId(params: {
 export function registerApiKeyRoutes(app: Hono, dependencies: ApiKeyDependencies = {}): void {
   app.post('/api/keys', async (c) => {
     const pool = getPool(dependencies.pool);
-    await ensureApiKeySchema(pool);
 
     let payload: z.infer<typeof createKeyRequestSchema>;
     try {
@@ -320,7 +269,6 @@ export function registerApiKeyRoutes(app: Hono, dependencies: ApiKeyDependencies
 
   app.get('/api/keys', async (c) => {
     const pool = getPool(dependencies.pool);
-    await ensureApiKeySchema(pool);
 
     const apiKeyHeader = c.req.header('x-api-key');
     if (!apiKeyHeader) {
@@ -356,7 +304,6 @@ export function registerApiKeyRoutes(app: Hono, dependencies: ApiKeyDependencies
 
   app.delete('/api/keys/:id', async (c) => {
     const pool = getPool(dependencies.pool);
-    await ensureApiKeySchema(pool);
 
     const apiKeyHeader = c.req.header('x-api-key');
     if (!apiKeyHeader) {

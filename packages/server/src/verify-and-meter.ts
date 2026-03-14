@@ -8,9 +8,10 @@ import {
   type VerifyUsdcPaymentOptions,
 } from '@payrail/gateway';
 import type { Context } from 'hono';
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import type { Address, Hex } from 'viem';
 import { z } from 'zod';
+
+import { getDatabasePool, type Queryable, type QueryablePool } from './db/connection.js';
 
 const verifyAndMeterRequestSchema = z.object({
   endpointId: z.string().min(1),
@@ -58,17 +59,6 @@ interface ExistingMeterEventRow {
 interface PaymentTransactionRow {
   id: string;
   tx_hash: string;
-}
-
-interface Queryable {
-  query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<QueryResult<T>>;
-}
-
-interface QueryablePool extends Queryable {
-  connect(): Promise<PoolClient>;
 }
 
 export interface VerifyAndMeterDependencies {
@@ -178,28 +168,8 @@ const INSERT_METER_EVENT_SQL = `
   RETURNING id
 `;
 
-let defaultPool: Pool | null = null;
-
-function getDefaultPool(): QueryablePool {
-  if (defaultPool) {
-    return defaultPool;
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required for verify-and-meter operations.');
-  }
-
-  defaultPool = new Pool({ connectionString });
-  return defaultPool;
-}
-
 function getPool(pool?: QueryablePool): QueryablePool {
-  if (pool) {
-    return pool;
-  }
-
-  return getDefaultPool();
+  return pool ?? getDatabasePool();
 }
 
 function serializeMicroAmount(value: bigint): number | string {

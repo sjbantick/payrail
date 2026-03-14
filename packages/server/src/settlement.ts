@@ -11,20 +11,7 @@ import {
   type Hex,
   type WalletClient,
 } from 'viem';
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
-
-import { runMigrations } from './db/migrate.js';
-
-interface Queryable {
-  query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<QueryResult<T>>;
-}
-
-interface QueryablePool extends Queryable {
-  connect(): Promise<PoolClient>;
-}
+import { getDatabasePool, type QueryablePool } from './db/connection.js';
 
 interface SettlementWindowRow {
   max_to_ts: Date | null;
@@ -92,9 +79,6 @@ interface StagedSettlement {
 const DEFAULT_FEE_BPS = 150n;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
-let defaultPool: Pool | null = null;
-const settlementSchemaReady = new WeakMap<object, Promise<unknown>>();
-
 function floorToHour(date: Date): Date {
   return new Date(date.getTime() - (date.getTime() % ONE_HOUR_MS));
 }
@@ -111,45 +95,8 @@ function calculateFee(grossUsdcMicro: bigint, feeBps: bigint): bigint {
   return (grossUsdcMicro * feeBps) / 10_000n;
 }
 
-function getDefaultPool(): QueryablePool {
-  if (defaultPool) {
-    return defaultPool;
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required for settlement operations.');
-  }
-
-  defaultPool = new Pool({ connectionString });
-  return defaultPool;
-}
-
 function getPool(pool?: QueryablePool): QueryablePool {
-  if (pool) {
-    return pool;
-  }
-
-  return getDefaultPool();
-}
-
-async function ensureSettlementSchema(pool: QueryablePool): Promise<void> {
-  const identity = pool as unknown as object;
-  const existing = settlementSchemaReady.get(identity);
-  if (existing) {
-    await existing;
-    return;
-  }
-
-  const pending = runMigrations({ pool: pool as never });
-  settlementSchemaReady.set(identity, pending);
-
-  try {
-    await pending;
-  } catch (error) {
-    settlementSchemaReady.delete(identity);
-    throw error;
-  }
+  return pool ?? getDatabasePool();
 }
 
 async function getSettlementWindow(pool: QueryablePool, now: Date): Promise<{ from: Date; to: Date } | null> {
@@ -243,8 +190,6 @@ export async function runSettlementCycle(options: SettlementRunOptions = {}): Pr
   const pool = getPool(options.pool);
   const now = options.now ?? new Date();
   const feeBps = options.feeBps ?? DEFAULT_FEE_BPS;
-
-  await ensureSettlementSchema(pool);
 
   const window = await getSettlementWindow(pool, now);
   if (!window) {

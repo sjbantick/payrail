@@ -7,21 +7,37 @@ effort, and enough context to pick up cold.
 
 ## P1 — Do before significant traffic
 
-### Consolidate dual pg.Pool singletons
+### ~~Consolidate dual pg.Pool singletons~~ ✅ DONE
 
-**What:** `api-keys.ts`, `settlement.ts`, and `api-endpoints.ts` each maintain their own
-`Pool` singleton alongside `verify-and-meter.ts`. Four pools × 10 connections default =
-40 connections. Railway free-tier Postgres caps at ~25.
-
-**Fix:** All files should import `getDatabasePool()` from `db/connection.ts` and delete
-their local pool management. The connection module already exports this function.
-
-**Effort:** S (45 min)
-**Blocked by:** Nothing
+Fixed in pool consolidation commit. All modules now import from `db/connection.ts`.
 
 ---
 
 ## P2 — Do in Milestone 3
+
+### Wrap settlement batch creation in a database transaction
+
+**What:** `runSettlementCycle()` in `settlement.ts` creates a settlement_batch, inserts
+settlement_items, and claims payment_transactions across 10+ separate queries with no
+wrapping transaction. A crash mid-cycle leaves a `queued` batch with partially-claimed
+transactions. Per-item rollback logic exists (unclaiming txs on payout failure), but the
+batch creation itself is not atomic.
+
+**Scenario:** Server crashes after inserting `settlement_items` but before claiming all
+`payment_transactions`. Result: orphaned batch in `queued` state, some transactions have
+`settled_batch_id` set but no corresponding confirmed settlement_item. Next cycle skips
+those transactions (they're "claimed"), so the developer never gets paid for them.
+
+**Fix:** Wrap the batch insert → item inserts → payment_transaction claims in a single
+`BEGIN`/`COMMIT` transaction. Only move to the payout phase after all staging is committed.
+If staging fails, `ROLLBACK` cleanly.
+
+**Effort:** M (1h)
+**Blocked by:** Nothing — but increases lock contention on `payment_transactions`. At
+current volume (daily settlement, low traffic), risk is negligible. Prioritise when
+settlement volume > 100 transactions/batch.
+
+---
 
 ### Delete metering.ts and the api_usage table
 
@@ -88,17 +104,10 @@ a log warning, or use a fallback wallet from env).
 
 ## P3 — Milestone 4+
 
-### Remove lazy ensureSchema patterns from api-keys.ts and settlement.ts
+### ~~Remove lazy ensureSchema patterns from api-keys.ts and settlement.ts~~ ✅ DONE
 
-**What:** `api-keys.ts` and `settlement.ts` both call `runMigrations()` lazily on the
-first request via WeakMap caches (`apiKeySchemaReady`, `settlementSchemaReady`). With
-migrations now running at server startup, these are redundant and add complexity.
-
-**Fix:** Remove `ensureApiKeySchema()` and `ensureSettlementSchema()` calls from their
-respective handlers. Migrations are guaranteed to have run before the first request.
-
-**Effort:** S (20 min)
-**Blocked by:** Nothing (pure cleanup, no risk)
+Fixed in pool consolidation commit. `ensureApiKeySchema()` and `ensureSettlementSchema()`
+removed. Migrations run at startup via `startServer()`.
 
 ---
 

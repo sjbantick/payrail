@@ -1,19 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Hono } from 'hono';
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { z } from 'zod';
 
-interface Queryable {
-  query<T extends QueryResultRow = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<QueryResult<T>>;
-}
-
-interface QueryablePool extends Queryable {
-  connect(): Promise<PoolClient>;
-}
+import { getDatabasePool, type QueryablePool } from './db/connection.js';
 
 interface EndpointRow {
   id: string;
@@ -50,24 +40,8 @@ const endpointIdSchema = z.object({
   id: z.string().uuid(),
 });
 
-let defaultPool: Pool | null = null;
-
-function getDefaultPool(): QueryablePool {
-  if (defaultPool) {
-    return defaultPool;
-  }
-
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is required for endpoint management.');
-  }
-
-  defaultPool = new Pool({ connectionString });
-  return defaultPool;
-}
-
 function getPool(pool?: QueryablePool): QueryablePool {
-  return pool ?? getDefaultPool();
+  return pool ?? getDatabasePool();
 }
 
 function getAdminApiKey(override?: string): string | undefined {

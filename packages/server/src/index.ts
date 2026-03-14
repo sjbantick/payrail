@@ -3,11 +3,12 @@ import { pathToFileURL } from 'node:url';
 
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { z } from 'zod';
 
 import { registerApiKeyRoutes } from './api-keys.js';
 import { registerApiEndpointRoutes } from './api-endpoints.js';
+import { initDatabasePool, getDatabasePool } from './db/connection.js';
 import { runMigrations } from './db/migrate.js';
 import {
   createVerifyAndMeterHandler,
@@ -195,8 +196,7 @@ export function createApp(options: VerifyAndMeterDependencies = {}) {
 
   // Usage stats for an API key — reads from meter_events (live data).
   app.get('/api/usage/:apiKey', async (c) => {
-    const pool = (options.pool as unknown as Pool) ??
-      new Pool({ connectionString: process.env.DATABASE_URL });
+    const pool = (options.pool as unknown as Pool) ?? getDatabasePool();
     const apiKey = c.req.param('apiKey');
 
     try {
@@ -247,7 +247,7 @@ export default app;
 export function startServer(env = process.env) {
   const config = parseServerEnv(env);
 
-  const pool = new Pool({ connectionString: config.DATABASE_URL });
+  const pool = initDatabasePool(config.DATABASE_URL);
 
   runMigrations()
     .then(() => {
