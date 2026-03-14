@@ -79,6 +79,7 @@ interface UsageRow {
   api_key: string;
   request_count: string;
   total_usdc_micro: string;
+  total_usdc_received: string;
   first_request_at: Date;
   last_request_at: Date;
 }
@@ -205,6 +206,7 @@ export function createApp(options: VerifyAndMeterDependencies = {}) {
             api_key,
             COUNT(*)::text AS request_count,
             COALESCE(SUM(total_price_usdc_micro), 0)::text AS total_usdc_micro,
+            (COALESCE(SUM(total_price_usdc_micro), 0) / 1000000.0)::text AS total_usdc_received,
             MIN(created_at) AS first_request_at,
             MAX(created_at) AS last_request_at
           FROM meter_events
@@ -223,6 +225,9 @@ export function createApp(options: VerifyAndMeterDependencies = {}) {
         apiKey: row.api_key,
         requestCount: Number(row.request_count),
         totalUsdcMicro: row.total_usdc_micro,
+        // Backward-compat field used by the dashboard (value in USDC, not micro)
+        totalUsdcReceived: row.total_usdc_received,
+        updatedAt: row.last_request_at.toISOString(),
         firstRequestAt: row.first_request_at.toISOString(),
         lastRequestAt: row.last_request_at.toISOString(),
       });
