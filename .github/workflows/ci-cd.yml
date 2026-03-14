@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build gateway (workspace dep for typecheck)
+        run: pnpm --filter @payrail/gateway build
+
       - name: Lint
         run: pnpm lint
 
